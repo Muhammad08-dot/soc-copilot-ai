@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: soc_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-soc_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-soc_secret_33}
+      POSTGRES_DB: ${POSTGRES_DB:-soc_copilot_db}
+    ports:
+      - "5439:5432"
+
+  redis:
+    image: redis:7-alpine
+    container_name: soc_redis
+    restart: always
+    ports:
+      - "6386:6379"
+
+  qdrant:
+    image: qdrant/qdrant:v1.8.0
+    container_name: soc_qdrant
+    restart: always
+    ports:
+      - "6339:6333"
+
+  backend:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    container_name: soc_backend
+    restart: always
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8007:8000"
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-soc_user}:${POSTGRES_PASSWORD:-soc_secret_33}@postgres:5432/${POSTGRES_DB:-soc_copilot_db}
+      - REDIS_URL=redis://redis:6379/0
+      - QDRANT_URL=http://qdrant:6333
+    depends_on:
+      - postgres
+      - redis
+      - qdrant
+
+  frontend:
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+    container_name: soc_frontend
+    restart: always
+    ports:
+      - "3007:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8007/api/v1
+    depends_on:
+      - backend
